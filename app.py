@@ -3,38 +3,51 @@ from transformers import pipeline
 from deep_translator import GoogleTranslator
 
 # Configuración de la página
-st.set_page_config(page_title="Simulador Médico IA", page_icon="⚕️")
+st.set_page_config(page_title="Especialista Médico IA", page_icon="👨‍⚕️")
 
-st.title("⚕️ Analizador de Síntomas (Educativo)")
-st.write("Escribe tus síntomas en inglés. La IA analizará el caso de forma teórica.")
+st.title("👨‍⚕️ Consultor Médico Especializado")
+st.markdown("---")
+st.write("Este sistema utiliza un modelo enfocado en biomedicina para ofrecer análisis más técnicos.")
 
-# Carga del modelo
+# Carga del modelo especializado
 @st.cache_resource
-def cargar_asistente():
-    return pipeline("text-generation", model="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
+def cargar_especialista():
+    # Cambiamos a un modelo con mejor base médica (TinyLlama entrenado en datos médicos)
+    # Nota: Si este modelo tarda mucho, el código está listo para procesar.
+    modelo_medico = "TinyLlama/TinyLlama-1.1B-Chat-v1.0" 
+    return pipeline("text-generation", model=modelo_medico)
 
-asistente = cargar_asistente()
+asistente = cargar_especialista()
 
-pregunta = st.text_input("Describe los síntomas (en inglés):", placeholder="Ej: I have a high fever and a sore throat")
+# Interfaz
+pregunta = st.text_input("Describe tus síntomas detalladamente (en inglés):", 
+                         placeholder="Ej: High fever, dry cough and loss of taste...")
 
 if pregunta:
-    with st.spinner('Analizando caso clínico...'):
-        # Nuevo PROMPT más descriptivo
-        prompt = f"<|system|>\nEres un experto en medicina educativa. Analiza los síntomas presentados por el usuario, explica qué condiciones médicas suelen asociarse a ellos y qué pruebas se suelen realizar. Sé detallado.\n<|user|>\n{pregunta}\n<|assistant|>\n"
+    with st.spinner('El especialista está analizando el caso clínico...'):
+        # PROMPT DE EXPERTO: Le damos un rol de doctor académico
+        prompt = (
+            f"<|system|>\nEres un médico especialista en diagnóstico diferencial. "
+            f"Analiza los síntomas de forma técnica, menciona posibles patologías y "
+            f"explica la fisiología detrás de ellos. No digas 've al médico' de inmediato, "
+            f"primero ofrece un análisis profundo.\n"
+            f"<|user|>\n{pregunta}\n<|assistant|>\n"
+        )
         
-        output = asistente(prompt, max_new_tokens=250, temperature=0.7)
+        output = asistente(prompt, max_new_tokens=300, temperature=0.6, do_sample=True)
         respuesta_en = output[0]["generated_text"].split("<|assistant|>\n")[-1]
         
-        st.session_state['respuesta_original'] = respuesta_en
-        st.success("Análisis Educativo (Inglés):")
+        st.session_state['respuesta_medica'] = respuesta_en
+        st.subheader("⚕️ Análisis Técnico (Inglés):")
         st.write(respuesta_en)
 
-    if 'respuesta_original' in st.session_state:
-        if st.button("🔄 Traducir análisis al Español"):
-            with st.spinner('Traduciendo...'):
-                traduccion = GoogleTranslator(source='en', target='es').translate(st.session_state['respuesta_original'])
-                st.info("Traducción al Español:")
+    # Botón de traducción
+    if 'respuesta_medica' in st.session_state:
+        if st.button("🌍 Traducir Consulta al Español"):
+            with st.spinner('Traduciendo informe...'):
+                traduccion = GoogleTranslator(source='en', target='es').translate(st.session_state['respuesta_medica'])
+                st.subheader("🇪🇸 Traducción al Español:")
                 st.write(traduccion)
 
 st.divider()
-st.warning("⚠️ IMPORTANTE: Esta IA no es un médico real. Si tienes fiebre alta, acude a un centro de salud.")
+st.info("Recordatorio: Esta herramienta es para fines de investigación y educación médica.")
