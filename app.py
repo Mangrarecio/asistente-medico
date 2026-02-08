@@ -1,38 +1,31 @@
 import streamlit as st
 from transformers import pipeline
 
-# Configuración de la página
+# Configuración de la aplicación
 st.set_page_config(page_title="Asistente Médico IA", page_icon="⚕️")
 
 st.title("⚕️ Asistente Médico Virtual")
-st.write("Bienvenido. Soy una IA experimental. Por favor, consulta siempre a un profesional.")
+st.markdown("---")
 
-# Función para cargar el modelo (el "cerebro")
-@st.cache_resource # Esto hace que solo se cargue una vez y no cada vez que escribas
-def cargar_modelo():
-    # Usamos un modelo ligero y moderno (TinyLlama)
-    pipe = pipeline("text-generation", model="TinyLlama/TinyLlama-1.1B-Chat-v1.0")
-    return pipe
+# Carga del modelo (IA gratuita TinyLlama)
+@st.cache_resource
+def cargar_cerebro():
+    # Modelo ligero para que funcione en cualquier PC
+    return pipeline("text-generation", model="TinyLlama/TinyLlama-1.1B-Chat-v1.0", device_map="auto")
 
-asistente = cargar_modelo()
+asistente = cargar_cerebro()
 
 # Interfaz de usuario
-pregunta = st.text_input("¿En qué puedo ayudarte hoy?", placeholder="Ej: ¿Qué síntomas tiene la gripe?")
+pregunta = st.text_input("¿Cuál es tu consulta?", placeholder="Ej: What are the main signs of dehydration?")
 
 if pregunta:
-    with st.spinner('Pensando...'):
-        # Creamos el formato de chat para el modelo
-        messages = [
-            {"role": "system", "content": "Eres un asistente médico amable y profesional. Responde de forma clara."},
-            {"role": "user", "content": pregunta},
-        ]
+    with st.spinner('Analizando consulta médica...'):
+        prompt = f"<|system|>\nEres un asistente médico atento. Responde de forma clara.\n<|user|>\n{pregunta}\n<|assistant|>\n"
+        outputs = asistente(prompt, max_new_tokens=200, temperature=0.7)
+        respuesta = outputs[0]["generated_text"].split("<|assistant|>\n")[-1]
         
-        # Generar respuesta
-        prompt = asistente.tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        outputs = asistente(prompt, max_new_tokens=256, do_sample=True, temperature=0.7)
-        respuesta = outputs[0]["generated_text"].split("<|assistant|>")[-1]
-        
-        st.subheader("Respuesta del Asistente:")
+        st.success("Respuesta:")
         st.write(respuesta)
 
-st.info("Nota: Este modelo está en inglés por defecto, pero podemos ajustarlo más adelante.")
+st.divider()
+st.caption("Nota: Esta herramienta es informativa. Consulta siempre a un médico profesional.")
