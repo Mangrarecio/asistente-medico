@@ -1,38 +1,35 @@
 import streamlit as st
 from transformers import pipeline
 
-# 1. Configuración de la Identidad de la App
+# Configuración de la página
 st.set_page_config(page_title="Asistente Médico IA", page_icon="⚕️")
 
 st.title("⚕️ Asistente Médico Virtual")
-st.markdown("---")
-st.write("Bienvenido. Soy una IA entrenada para responder dudas médicas generales.")
+st.write("Cargando modelo inteligente optimizado para la nube...")
 
-# 2. Carga Inteligente del Modelo (TinyLlama)
+# Carga del modelo ajustada para servidores gratuitos
 @st.cache_resource
-def cargar_cerebro():
-    # Modelo ligero, gratuito y moderno de Hugging Face
+def cargar_asistente():
+    # Usamos el mismo modelo pero con una configuración más sencilla
     modelo_ia = "TinyLlama/TinyLlama-1.1B-Chat-v1.0"
-    return pipeline("text-generation", model=modelo_ia, device_map="auto")
+    # Hemos quitado device_map="auto" para evitar el error de memoria
+    return pipeline("text-generation", model=modelo_ia)
 
-asistente = cargar_cerebro()
+asistente = cargar_asistente()
 
-# 3. Interfaz de Consulta
-pregunta = st.text_input("¿En qué puedo ayudarte hoy?", placeholder="Ej: What are the main causes of a headache?")
+# Interfaz de usuario
+pregunta = st.text_input("Haz tu consulta médica (en inglés):", placeholder="Ej: Symptoms of flu")
 
 if pregunta:
-    with st.spinner('Consultando base de conocimientos...'):
-        # Formato de conversación profesional (Prompt Engineering)
-        prompt = f"<|system|>\nEres un asistente médico atento y profesional. Responde de forma clara.\n<|user|>\n{pregunta}\n<|assistant|>\n"
+    with st.spinner('La IA está pensando...'):
+        prompt = f"<|system|>\nEres un asistente médico breve.\n<|user|>\n{pregunta}\n<|assistant|>\n"
         
-        # Generar la respuesta
-        outputs = asistente(prompt, max_new_tokens=200, temperature=0.7)
-        respuesta_final = outputs[0]["generated_text"].split("<|assistant|>\n")[-1]
+        # Generación de texto
+        output = asistente(prompt, max_new_tokens=150, temperature=0.7)
+        respuesta = output[0]["generated_text"].split("<|assistant|>\n")[-1]
         
-        st.success("Análisis del Asistente:")
-        st.write(respuesta_final)
+        st.success("Respuesta:")
+        st.write(respuesta)
 
-# 4. Pie de página y Advertencias
 st.divider()
-st.info("💡 **Dato:** Este asistente funciona mejor con preguntas en inglés.")
-st.caption("Aviso legal: Esta herramienta no sustituye el consejo de un médico colegiado.")
+st.caption("Aviso: Esta herramienta es informativa. Consulta a un médico real.")
