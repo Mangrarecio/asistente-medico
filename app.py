@@ -15,12 +15,33 @@ un despliegue público o un uso intensivo.
 
 import streamlit as st
 
-from diagnosis_engine import MotorDiagnostico, SintomaNoDisponible, SYMPTOM_PAGES
+import build_index
+from diagnosis_engine import MotorDiagnostico, SintomaNoDisponible, SYMPTOM_PAGES, recargar_symptom_pages
 
 st.set_page_config(page_title="Asistente de Diagnóstico por Síntomas", page_icon="🩺")
 
 st.title("🩺 Asistente de Diagnóstico por Síntomas")
 st.caption("Fuente: tablas de causas del Manual MSD (versión profesional) — consulta en vivo.")
+
+with st.sidebar:
+    st.subheader("Índice de síntomas")
+    st.write(f"Síntomas disponibles ahora mismo: **{len(SYMPTOM_PAGES)}**")
+    st.caption(
+        "Si la lista es corta (5), aún no has construido el índice completo. "
+        "Pulsa el botón para explorar el sitemap del Manual MSD y ampliarla. "
+        "Tarda varios minutos porque respeta una pausa entre peticiones."
+    )
+    if st.button("🔄 Construir/actualizar índice de síntomas"):
+        barra = st.progress(0)
+        estado = st.empty()
+        for paso, total, mensaje in build_index.construir_indice_generador():
+            estado.text(mensaje)
+            if total:
+                barra.progress(min(paso / total, 1.0))
+        recargar_symptom_pages()
+        st.success(f"Índice actualizado: {len(SYMPTOM_PAGES)} síntomas disponibles.")
+        st.rerun()
+
 
 if "motor" not in st.session_state:
     st.session_state.motor = None

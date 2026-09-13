@@ -1,6 +1,6 @@
 """
 build_index.py
-Script de construcción del índice de síntomas del Manual MSD.
+Construcción del índice de síntomas del Manual MSD.
 
 Recorre el sitemap oficial del sitio (un archivo XML estático que NO
 depende de JavaScript, a diferencia de la búsqueda del propio sitio) para
@@ -8,29 +8,25 @@ descubrir todas las páginas de síntoma de la versión profesional, comprueba
 cuáles tienen una tabla de "causas" reconocible (ver scraper.obtener_tabla_causas)
 y guarda el resultado en symptom_index.json.
 
-IMPORTANTE:
-- Este script se ejecuta UNA VEZ (o de forma periódica para actualizar el
-  índice), no en cada consulta del usuario. La propia app (app.py) solo LEE
-  el archivo symptom_index.json que este script genera.
-- Tarda varios minutos porque respeta una pausa de cortesía entre peticiones
-  (ver scraper.REQUEST_DELAY) y puede recorrer varios cientos de páginas.
-- No ha sido posible ejecutar ni probar este script contra el sitio real
-  desde este entorno de desarrollo (sin acceso a msdmanuals.com). Dos cosas
-  a revisar la primera vez que lo ejecutes:
-    1. Si el patrón PATRON_SINTOMA no encuentra URLs, imprime alguna URL de
-       ejemplo del sitemap (con un print) y ajusta la expresión regular.
-    2. El sitemap puede venir en varias partes (un índice de sitemaps con
-       <sitemap><loc>...</loc></sitemap> en vez de <url><loc>...</loc></url>
-       directamente) si el sitio decide paginarlo en el futuro; en ese caso
-       habría que descargar cada sub-sitemap listado.
+Este módulo se puede usar de dos formas:
+1. Como script de línea de comandos: `python build_index.py`
+2. Importado desde app.py, usando construir_indice_generador() para mostrar
+   progreso dentro de la interfaz de Streamlit (útil si despliegas en
+   Streamlit Cloud, donde no puedes ejecutar un script suelto por separado).
 
-Uso:
-    python build_index.py
+IMPORTANTE:
+- Este proceso tarda varios minutos porque respeta una pausa de cortesía
+  entre peticiones (ver scraper.REQUEST_DELAY) y puede recorrer varios
+  cientos de páginas.
+- No ha sido posible ejecutar ni probar este script contra el sitio real
+  desde el entorno donde se escribió este código (sin acceso a
+  msdmanuals.com). Si PATRON_SINTOMA no encuentra ninguna URL, imprime un
+  fragmento del sitemap descargado y ajusta la expresión regular.
 """
 
 import json
+import os
 import re
-import time
 from urllib.parse import unquote
 
 import requests
@@ -39,7 +35,7 @@ from bs4 import BeautifulSoup
 import scraper
 
 SITEMAP_URL = "https://www.msdmanuals.com/es/sitemap.ashx"
-OUTPUT_FILE = "symptom_index.json"
+OUTPUT_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "symptom_index.json")
 
 # Solo nos interesan páginas de la versión profesional cuya carpeta
 # contenga "síntomas" (donde viven las tablas de causas por síntoma), por
@@ -79,39 +75,56 @@ def slug_a_clave(url):
     return slug.replace("-", " ")
 
 
-def construir_indice():
-    print("Descargando sitemap...")
+def construir_indice_generador():
+    """
+    Generador que hace todo el trabajo de construir el índice, produciendo
+    (paso_actual, total_pasos, mensaje) en cada avance. Al terminar, dentro
+    de mensaje viene también el número final de síntomas guardados.
+
+    Se usa tanto desde la CLI (construir_indice) como desde app.py con una
+    barra de progreso de Streamlit.
+    """
+    yield (0, 1, "Descargando el sitemap del Manual MSD...")
     xml_text = descargar_sitemap()
     urls = extraer_urls_sintomas(xml_text)
-    print(f"Encontradas {len(urls)} páginas candidatas de síntoma.")
+    total = len(urls)
+    yield (0, max(total, 1), f"Encontradas {total} páginas candidatas de síntoma.")
 
     if not urls:
-        print(
+        yield (
+            1,
+            1,
             "AVISO: no se encontró ninguna URL con el patrón esperado. "
-            "Revisa PATRON_SINTOMA en este script contra el contenido real "
-            "del sitemap (imprime xml_text o busca 'síntomas' a mano)."
+            "Puede que el Manual MSD haya cambiado el formato de sus URLs; "
+            "revisa PATRON_SINTOMA en build_index.py.",
         )
         return
 
     indice = {}
     for i, url in enumerate(urls, 1):
         clave = slug_a_clave(url)
-        print(f"[{i}/{len(urls)}] {clave} -> {url}")
         try:
             filas = scraper.obtener_tabla_causas(url)
         except Exception as e:
-            print(f"   ! error al procesar esta página: {e}")
+            yield (i, total, f"[{i}/{total}] {clave}: error al procesar ({e})")
             continue
 
         if filas:
             indice[clave] = url
+            yield (i, total, f"[{i}/{total}] {clave}: OK ({len(filas)} causas)")
         else:
-            print("   (sin tabla de causas reconocible; se omite)")
+            yield (i, total, f"[{i}/{total}] {clave}: sin tabla de causas, se omite")
 
     with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
         json.dump(indice, f, ensure_ascii=False, indent=2)
 
-    print(f"\nÍndice guardado en {OUTPUT_FILE} con {len(indice)} síntomas.")
+    yield (total, total, f"Listo. Índice guardado con {len(indice)} síntomas.")
+
+
+def construir_indice():
+    """Versión de línea de comandos: imprime el progreso en la terminal."""
+    for _, _, mensaje in construir_indice_generador():
+        print(mensaje)
 
 
 if __name__ == "__main__":

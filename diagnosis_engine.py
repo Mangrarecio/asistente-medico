@@ -47,6 +47,20 @@ def _cargar_symptom_pages():
 SYMPTOM_PAGES = _cargar_symptom_pages()
 
 
+def recargar_symptom_pages():
+    """
+    Vuelve a leer symptom_index.json y actualiza SYMPTOM_PAGES *en el mismo
+    objeto* (clear + update) en vez de crear uno nuevo, para que cualquier
+    código que ya haya importado SYMPTOM_PAGES vea los cambios sin
+    necesidad de reimportar el módulo (relevante al llamarlo desde un botón
+    de Streamlit, ver app.py).
+    """
+    nuevas = _cargar_symptom_pages()
+    SYMPTOM_PAGES.clear()
+    SYMPTOM_PAGES.update(nuevas)
+    return SYMPTOM_PAGES
+
+
 def _normalizar(texto):
     """minusculas + sin acentos, para comparar de forma tolerante."""
     texto = texto.lower().strip()

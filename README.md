@@ -46,22 +46,31 @@ asistente_diagnostico_msd/
 └── README.md
 ```
 
-## 🚀 Puesta en marcha en local
+## 🚀 Puesta en marcha
+
+**Opción A — desde la propia app (recomendada, incluido Streamlit Cloud):**
+
+Despliega o ejecuta la app normalmente (`streamlit run app.py`, o súbela a
+Streamlit Cloud). En la **barra lateral** verás un botón
+"🔄 Construir/actualizar índice de síntomas": púlsalo la primera vez que uses
+la app. Tarda varios minutos (respeta una pausa entre peticiones al Manual
+MSD) y muestra el progreso en pantalla. Al terminar, guarda
+`symptom_index.json` y recarga el índice automáticamente — no hace falta
+reiniciar nada.
+
+**Opción B — desde la línea de comandos (si prefieres tenerlo listo antes
+de desplegar):**
 
 ```bash
 pip install -r requirements.txt
-
-# Paso único (o periódico, para mantener el índice actualizado):
-# recorre el sitemap y construye symptom_index.json.
-# Tarda varios minutos porque respeta una pausa entre peticiones.
 python build_index.py
-
 streamlit run app.py
 ```
 
-Si no ejecutas `build_index.py`, la app sigue funcionando con una lista de
-respaldo de 5 síntomas (dolor torácico, disnea, palpitaciones, síncope,
-dolor abdominal) — suficiente para probarla, pero mucho más limitada.
+Si no has construido el índice por ninguna de las dos vías, la app sigue
+funcionando con una lista de respaldo de 5 síntomas (dolor torácico, disnea,
+palpitaciones, síncope, dolor abdominal) — suficiente para probarla, pero
+mucho más limitada.
 
 ## 🛠️ Si algo deja de funcionar
 
