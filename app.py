@@ -1,53 +1,112 @@
+"""
+app.py
+Interfaz Streamlit del Asistente de Diagnóstico por Síntomas (v2).
+
+Fuente de datos: tablas de "causas de <síntoma>" del Manual MSD (versión
+profesional), consultadas en vivo mediante scraping puntual (ver scraper.py).
+No se descarga ni almacena el manual completo.
+
+AVISO IMPORTANTE:
+Esta aplicación es una herramienta de apoyo y aprendizaje, NO sustituye el
+juicio clínico ni un diagnóstico médico profesional. El Manual MSD no publica
+una licencia abierta para su contenido; revisa sus términos de uso antes de
+un despliegue público o un uso intensivo.
+"""
+
 import streamlit as st
-from transformers import pipeline
-from deep_translator import GoogleTranslator
 
-# Configuración de la página
-st.set_page_config(page_title="Especialista Médico IA", page_icon="👨‍⚕️")
+from diagnosis_engine import MotorDiagnostico, SintomaNoDisponible, SYMPTOM_PAGES
 
-st.title("👨‍⚕️ Consultor Médico Especializado")
-st.markdown("---")
-st.write("Este sistema utiliza un modelo enfocado en biomedicina para ofrecer análisis más técnicos.")
+st.set_page_config(page_title="Asistente de Diagnóstico por Síntomas", page_icon="🩺")
 
-# Carga del modelo especializado
-@st.cache_resource
-def cargar_especialista():
-    # Cambiamos a un modelo con mejor base médica (TinyLlama entrenado en datos médicos)
-    # Nota: Si este modelo tarda mucho, el código está listo para procesar.
-    modelo_medico = "TinyLlama/TinyLlama-1.1B-Chat-v1.0" 
-    return pipeline("text-generation", model=modelo_medico)
+st.title("🩺 Asistente de Diagnóstico por Síntomas")
+st.caption("Fuente: tablas de causas del Manual MSD (versión profesional) — consulta en vivo.")
 
-asistente = cargar_especialista()
+if "motor" not in st.session_state:
+    st.session_state.motor = None
+    st.session_state.pregunta_actual = None
+    st.session_state.resultado = None
+    st.session_state.error = None
 
-# Interfaz
-pregunta = st.text_input("Describe tus síntomas detalladamente (en inglés):", 
-                         placeholder="Ej: High fever, dry cough and loss of taste...")
+# --- Paso 1: síntoma inicial ---
+if st.session_state.motor is None:
+    st.write(f"Síntomas disponibles ahora mismo: *{', '.join(sorted(SYMPTOM_PAGES.keys()))}*")
+    sintoma_inicial = st.text_input("Introduce el síntoma inicial (ej. 'dolor toracico'):")
+    if st.button("Empezar diagnóstico") and sintoma_inicial.strip():
+        try:
+            with st.spinner("Consultando la tabla de causas en el Manual MSD..."):
+                st.session_state.motor = MotorDiagnostico(sintoma_inicial.strip())
+            st.session_state.error = None
+        except SintomaNoDisponible as e:
+            st.session_state.error = str(e)
+        st.rerun()
 
-if pregunta:
-    with st.spinner('El especialista está analizando el caso clínico...'):
-        # PROMPT DE EXPERTO: Le damos un rol de doctor académico
-        prompt = (
-            f"<|system|>\nEres un médico especialista en diagnóstico diferencial. "
-            f"Analiza los síntomas de forma técnica, menciona posibles patologías y "
-            f"explica la fisiología detrás de ellos. No digas 've al médico' de inmediato, "
-            f"primero ofrece un análisis profundo.\n"
-            f"<|user|>\n{pregunta}\n<|assistant|>\n"
+    if st.session_state.error:
+        st.warning(st.session_state.error)
+
+# --- Paso 2: preguntas interactivas ---
+else:
+    motor = st.session_state.motor
+
+    if not motor.candidatas:
+        st.error(
+            "No se ha podido extraer ninguna tabla de causas de esta página. "
+            "Puede que el Manual MSD haya cambiado el formato: revisa scraper.py."
         )
-        
-        output = asistente(prompt, max_new_tokens=300, temperature=0.6, do_sample=True)
-        respuesta_en = output[0]["generated_text"].split("<|assistant|>\n")[-1]
-        
-        st.session_state['respuesta_medica'] = respuesta_en
-        st.subheader("⚕️ Análisis Técnico (Inglés):")
-        st.write(respuesta_en)
+        if st.button("Volver a empezar"):
+            st.session_state.motor = None
+            st.rerun()
+    else:
+        if st.session_state.resultado is None:
+            resultado = motor.resultado_final()
+            if resultado:
+                st.session_state.resultado = resultado
+            else:
+                pregunta = motor.siguiente_pregunta()
+                if pregunta is None:
+                    puntuaciones = motor.puntuar_candidatas()
+                    st.session_state.resultado = puntuaciones[0][0] if puntuaciones else None
+                else:
+                    st.session_state.pregunta_actual = pregunta
 
-    # Botón de traducción
-    if 'respuesta_medica' in st.session_state:
-        if st.button("🌍 Traducir Consulta al Español"):
-            with st.spinner('Traduciendo informe...'):
-                traduccion = GoogleTranslator(source='en', target='es').translate(st.session_state['respuesta_medica'])
-                st.subheader("🇪🇸 Traducción al Español:")
-                st.write(traduccion)
+        if st.session_state.resultado:
+            r = st.session_state.resultado
+            st.success(f"Causa más probable según la fuente: **{r['titulo']}**")
+            if r["url"]:
+                st.markdown(f"[Ver ficha completa en el Manual MSD]({r['url']})")
+            with st.expander("Hallazgos sugestivos descritos en la fuente"):
+                for h in r["hallazgos"]:
+                    st.write(f"- {h}")
+            with st.expander("Abordaje diagnóstico sugerido"):
+                for a in r["abordaje"]:
+                    st.write(f"- {a}")
+            st.divider()
+            st.subheader("Otras causas consideradas")
+            for c, score in motor.puntuar_candidatas()[1:4]:
+                st.write(f"- {c['titulo']} (puntuación: {score})")
+            if st.button("Empezar un nuevo diagnóstico"):
+                st.session_state.motor = None
+                st.session_state.resultado = None
+                st.session_state.pregunta_actual = None
+                st.rerun()
+
+        elif st.session_state.pregunta_actual:
+            st.write(f"**Hallazgos confirmados:** {len(motor.hallazgos_confirmados)}")
+            st.write(f"¿Presenta también: **{st.session_state.pregunta_actual}**?")
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("Sí"):
+                    motor.responder(st.session_state.pregunta_actual, True)
+                    st.session_state.pregunta_actual = None
+                    st.rerun()
+            with col2:
+                if st.button("No"):
+                    motor.responder(st.session_state.pregunta_actual, False)
+                    st.session_state.pregunta_actual = None
+                    st.rerun()
 
 st.divider()
-st.info("Recordatorio: Esta herramienta es para fines de investigación y educación médica.")
+st.caption(
+    "⚠️ Esta app es una herramienta de apoyo educativo y no sustituye el diagnóstico "
+    "de un profesional sanitario. Los datos se consultan en vivo desde msdmanuals.com."
+)
